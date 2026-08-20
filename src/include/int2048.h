@@ -14,12 +14,23 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <utility> // for pair
 
 // Do not use "using namespace std;"
 
 namespace sjtu {
 class int2048 {
-  // todo
+private:
+    bool is_positive;
+    std::vector<long long> digits;
+
+    void normalize();
+    static int compare_abs(const int2048 &, const int2048 &);
+    static int2048 add_abs(const int2048 &, const int2048 &);
+    static int2048 subtract_abs(const int2048 &, const int2048 &);
+    static int2048 multiply_abs(const int2048 &, const int2048 &);
+    static std::pair<int2048, int2048> divide_abs(const int2048 &, const int2048 &);
+
 public:
   // Constructors
   int2048();
