@@ -1,11 +1,152 @@
-#include "int2048.h"
+#pragma once
+#ifndef SJTU_BIGINTEGER
+#define SJTU_BIGINTEGER
+
+#include <complex>
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+#include <vector>
+#include <utility>
+#include <cmath>
+
+namespace sjtu {
+class int2048 {
+private:
+    bool is_positive;
+    std::vector<long long> digits;
+
+    void normalize();
+    static int compare_abs(const int2048 &, const int2048 &);
+    static int2048 add_abs(const int2048 &, const int2048 &);
+    static int2048 subtract_abs(const int2048 &, const int2048 &);
+    static int2048 multiply_abs_naive(const int2048 &, const int2048 &);
+    static int2048 multiply_abs_fft(const int2048 &, const int2048 &);
+    static std::pair<int2048, int2048> divide_abs(const int2048 &, const int2048 &);
+
+public:
+  int2048();
+  int2048(long long);
+  int2048(const std::string &);
+  int2048(const int2048 &);
+
+  void read(const std::string &);
+  void print();
+
+  int2048 &add(const int2048 &);
+  friend int2048 add(int2048, const int2048 &);
+
+  int2048 &minus(const int2048 &);
+  friend int2048 minus(int2048, const int2048 &);
+
+  int2048 operator+() const;
+  int2048 operator-() const;
+
+  int2048 &operator=(const int2048 &);
+
+  int2048 &operator+=(const int2048 &);
+  friend int2048 operator+(int2048, const int2048 &);
+
+  int2048 &operator-=(const int2048 &);
+  friend int2048 operator-(int2048, const int2048 &);
+
+  int2048 &operator*=(const int2048 &);
+  friend int2048 operator*(int2048, const int2048 &);
+
+  int2048 &operator/=(const int2048 &);
+  friend int2048 operator/(int2048, const int2048 &);
+
+  int2048 &operator%=(const int2048 &);
+  friend int2048 operator%(int2048, const int2048 &);
+
+  friend std::istream &operator>>(std::istream &, int2048 &);
+  friend std::ostream &operator<<(std::ostream &, const int2048 &);
+
+  friend bool operator==(const int2048 &, const int2048 &);
+  friend bool operator!=(const int2048 &, const int2048 &);
+  friend bool operator<(const int2048 &, const int2048 &);
+  friend bool operator>(const int2048 &, const int2048 &);
+  friend bool operator<=(const int2048 &, const int2048 &);
+  friend bool operator>=(const int2048 &, const int2048 &);
+};
+} // namespace sjtu
+
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 
+using cd = std::complex<double>;
+const double PI = acos(-1);
+
+void fft(std::vector<cd> &a, bool invert) {
+    int n = a.size();
+
+    for (int i = 1, j = 0; i < n; i++) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1)
+            j ^= bit;
+        j ^= bit;
+
+        if (i < j)
+            swap(a[i], a[j]);
+    }
+
+    for (int len = 2; len <= n; len <<= 1) {
+        double ang = 2 * PI / len * (invert ? -1 : 1);
+        cd wlen(cos(ang), sin(ang));
+        for (int i = 0; i < n; i += len) {
+            cd w(1);
+            for (int j = 0; j < len / 2; j++) {
+                cd u = a[i+j], v = a[i+j+len/2] * w;
+                a[i+j] = u + v;
+                a[i+j+len/2] = u - v;
+                w *= wlen;
+            }
+        }
+    }
+
+    if (invert) {
+        for (cd &x : a)
+            x /= n;
+    }
+}
+
+std::vector<long long> multiply_fft(std::vector<long long> const& a, std::vector<long long> const& b, long long base) {
+    std::vector<cd> fa(a.begin(), a.end()), fb(b.begin(), b.end());
+    int n = 1;
+    while (n < a.size() + b.size()) 
+        n <<= 1;
+    fa.resize(n);
+    fb.resize(n);
+
+    fft(fa, false);
+    fft(fb, false);
+    for (int i = 0; i < n; i++)
+        fa[i] *= fb[i];
+    fft(fa, true);
+
+    std::vector<long long> result(n);
+    for (int i = 0; i < n; i++)
+        result[i] = round(fa[i].real());
+    
+    long long carry = 0;
+    for (int i = 0; i < result.size(); i++) {
+        long long total = result[i] + carry;
+        result[i] = total % base;
+        carry = total / base;
+    }
+    
+    while (result.size() > 1 && result.back() == 0) {
+        result.pop_back();
+    }
+    return result;
+}
+
 namespace sjtu {
 
-const long long BASE = 1000000000; // 10^9
+const long long BASE = 1000000000;
 
 void int2048::normalize() {
     while (!digits.empty() && digits.back() == 0) {
@@ -31,6 +172,7 @@ int int2048::compare_abs(const int2048 &a, const int2048 &b) {
 
 int2048 int2048::add_abs(const int2048 &a, const int2048 &b) {
     int2048 res;
+    res.digits.clear();
     res.is_positive = true;
     long long carry = 0;
     int i = 0;
@@ -47,8 +189,8 @@ int2048 int2048::add_abs(const int2048 &a, const int2048 &b) {
 }
 
 int2048 int2048::subtract_abs(const int2048 &a, const int2048 &b) {
-    // a >= b
     int2048 res;
+    res.digits.clear();
     res.is_positive = true;
     long long borrow = 0;
     int i = 0;
@@ -70,8 +212,9 @@ int2048 int2048::subtract_abs(const int2048 &a, const int2048 &b) {
     return res;
 }
 
-int2048 int2048::multiply_abs(const int2048 &a, const int2048 &b) {
+int2048 int2048::multiply_abs_naive(const int2048 &a, const int2048 &b) {
     int2048 res;
+    res.digits.clear();
     res.is_positive = true;
     res.digits.resize(a.digits.size() + b.digits.size(), 0);
     for (int i = 0; i < a.digits.size(); i++) {
@@ -89,8 +232,17 @@ int2048 int2048::multiply_abs(const int2048 &a, const int2048 &b) {
     return res;
 }
 
+int2048 int2048::multiply_abs_fft(const int2048 &a, const int2048 &b) {
+    int2048 res;
+    res.is_positive = true;
+    res.digits = multiply_fft(a.digits, b.digits, BASE);
+    res.normalize();
+    return res;
+}
+
 std::pair<int2048, int2048> int2048::divide_abs(const int2048 &dividend, const int2048 &divisor) {
     int2048 quotient;
+    quotient.digits.clear();
     quotient.is_positive = true;
     int2048 remainder = dividend;
     remainder.is_positive = true;
@@ -113,6 +265,7 @@ std::pair<int2048, int2048> int2048::divide_abs(const int2048 &dividend, const i
         while (low <= high) {
             long long mid = (low + high) / 2;
             int2048 product;
+            product.digits.clear();
             product.is_positive = true;
             long long carry = 0;
             for (int j = 0; j < temp_divisor.digits.size() || carry; j++) {
@@ -135,6 +288,7 @@ std::pair<int2048, int2048> int2048::divide_abs(const int2048 &dividend, const i
         if (q != 0) {
             quotient.digits[i] = q;
             int2048 product;
+            product.digits.clear();
             product.is_positive = true;
             long long carry = 0;
             for (int j = 0; j < temp_divisor.digits.size() || carry; j++) {
@@ -312,7 +466,13 @@ int2048 &int2048::operator*=(const int2048 &other) {
 }
 
 int2048 operator*(int2048 a, const int2048 &b) {
-    int2048 res = int2048::multiply_abs(a, b);
+    int2048 res;
+    // For small numbers, use naive multiplication; for large numbers, use FFT
+    if (a.digits.size() > 200 || b.digits.size() > 200) {
+        res = int2048::multiply_abs_fft(a, b);
+    } else {
+        res = int2048::multiply_abs_naive(a, b);
+    }
     if (res.digits.size() == 1 && res.digits[0] == 0) {
         res.is_positive = true;
     } else {
@@ -337,10 +497,8 @@ int2048 operator/(int2048 dividend, const int2048 &divisor) {
     }
     if (int2048::compare_abs(remainder, int2048(0)) != 0) {
         if (dividend.is_positive != divisor.is_positive) {
-            res = int2048::subtract_abs(res, int2048(1));
-            if (!(res.digits.size() == 1 && res.digits[0] == 0)) {
-                res.is_positive = !res.is_positive;
-            }
+            res = int2048::add_abs(res, int2048(1));
+            res.is_positive = false;
         }
     }
     res.normalize();
